@@ -1,2 +1,2 @@
 # dev-tech-write
-Writing about a few things that matter to me
+These are the notes of the technical topics I learned in the past few months.
