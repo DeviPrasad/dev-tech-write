@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-use crate::binary;
+use crate::{binary, bits::{self, Uint128}};
 
 // Element represents an element of the field GF(2^255-19).
 // An element is represented as a radix-2^51 value.
 // An element t represents the integer
-//     t.l0 + t.1*2^51 + t.l2*2^102 + t.l3*2^153 + t.l4*2^204
+//     t.0 + t.1*2^51 + t.2*2^102 + t.3*2^153 + t.4*2^204
 // Between operations, all limbs are expected to be lower than 2^52.
 // The zero value is a valid zero element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -38,30 +38,317 @@ impl Element {
     }
 
     // assign self to (a + b)
-    pub fn add(&mut self, a: &Element, b: &Element) -> &Self {
+    pub fn add(&mut self, a: &Element, b: &Element) {
         self.0 = a.0 + b.0;
         self.1 = a.1 + b.1;
         self.2 = a.2 + b.2;
         self.3 = a.3 + b.3;
         self.4 = a.4 + b.4;
 
-        self.carry_propagate()
+        self.carry_propagate();
     }
 
     // assign self to (a - b)
-    pub fn subtract(&mut self, a: &Element, b: &Element) -> &Self {
+    pub fn subtract(&mut self, a: &Element, b: &Element) {
         self.0 = (a.0 + 0xFFFFFFFFFFFDA) - b.0;
         self.1 = (a.1 + 0xFFFFFFFFFFFFE) - b.1;
         self.2 = (a.2 + 0xFFFFFFFFFFFFE) - b.2;
         self.3 = (a.3 + 0xFFFFFFFFFFFFE) - b.3;
         self.4 = (a.4 + 0xFFFFFFFFFFFFE) - b.4;
 
-        self.carry_propagate()
+        self.carry_propagate();
     }
 
     // assign self to -a
-    pub fn negate(&mut self, a: &Element) -> &Self {
-        self.subtract(Element::ZERO, a)
+    pub fn negate(&mut self, a: &Element) {
+        self.subtract(Element::ZERO, a);
+    }
+
+    pub fn shift_right_51(a: &Uint128) -> u64 {
+        (a.hi << (64 - 51)) | (a.lo >> 51)
+    }
+
+    // calculate x * y.
+    pub fn multiply(a: &Element, b: &Element) -> Element {
+        let a0 = a.0;
+        let a1 = a.1;
+        let a2 = a.2;
+        let a3 = a.3;
+        let a4 = a.4;
+
+        let b0 = b.0;
+        let b1 = b.1;
+        let b2 = b.2;
+        let b3 = b.3;
+        let b4 = b.4;
+
+        // Limb multiplication works like pen-and-paper columnar multiplication, but
+        // with 51-bit limbs instead of digits.
+        //
+        //                          a4   a3   a2   a1   a0  x
+        //                          b4   b3   b2   b1   b0  =
+        //                         ------------------------
+        //                        a4b0 a3b0 a2b0 a1b0 a0b0  +
+        //                   a4b1 a3b1 a2b1 a1b1 a0b1       +
+        //              a4b2 a3b2 a2b2 a1b2 a0b2            +
+        //         a4b3 a3b3 a2b3 a1b3 a0b3                 +
+        //    a4b4 a3b4 a2b4 a1b4 a0b4                      =
+        //   ----------------------------------------------
+        //      r8   r7   r6   r5   r4   r3   r2   r1   r0
+        //
+        // We can then use the reduction identity (a * 2²⁵⁵ + b = a * 19 + b) to
+        // reduce the limbs that would overflow 255 bits. r5 * 2²⁵⁵ becomes 19 * r5,
+        // r6 * 2³⁰⁶ becomes 19 * r6 * 2⁵¹, etc.
+        //
+        // Reduction can be carried out simultaneously to multiplication. For
+        // example, we do not compute r5: whenever the result of a multiplication
+        // belongs to r5, like a1b4, we multiply it by 19 and add the result to r0.
+        //
+        //            a4b0    a3b0    a2b0    a1b0    a0b0  +
+        //            a3b1    a2b1    a1b1    a0b1 19×a4b1  +
+        //            a2b2    a1b2    a0b2 19×a4b2 19×a3b2  +
+        //            a1b3    a0b3 19×a4b3 19×a3b3 19×a2b3  +
+        //            a0b4 19×a4b4 19×a3b4 19×a2b4 19×a1b4  =
+        //           --------------------------------------
+        //              r4      r3      r2      r1      r0
+        //
+        // Finally we add up the columns into wide, overlapping limbs.
+
+        let a1_19 = a1 * 19;
+        let a2_19 = a2 * 19;
+        let a3_19 = a3 * 19;
+        let a4_19 = a4 * 19;
+
+        // r0 = a0×b0 + 19×(a1×b4 + a2×b3 + a3×b2 + a4×b1)
+        let r0 = bits::mul64(a0, b0);
+        let r0 = bits::add_mul64(r0, a1_19, b4);
+        let r0 = bits::add_mul64(r0, a2_19, b3);
+        let r0 = bits::add_mul64(r0, a3_19, b2);
+        let r0 = bits::add_mul64(r0, a4_19, b1);
+
+        // r1 = a0×b1 + a1×b0 + 19×(a2×b4 + a3×b3 + a4×b2)
+        let r1 = bits::mul64(a0, b1);
+        let r1 = bits::add_mul64(r1, a1, b0);
+        let r1 = bits::add_mul64(r1, a2_19, b4);
+        let r1 = bits::add_mul64(r1, a3_19, b3);
+        let r1 = bits::add_mul64(r1, a4_19, b2);
+
+        // r2 = a0×b2 + a1×b1 + a2×b0 + 19×(a3×b4 + a4×b3)
+        let r2 = bits::mul64(a0, b2);
+        let r2 = bits::add_mul64(r2, a1, b1);
+        let r2 = bits::add_mul64(r2, a2, b0);
+        let r2 = bits::add_mul64(r2, a3_19, b4);
+        let r2 = bits::add_mul64(r2, a4_19, b3);
+
+        // r3 = a0×b3 + a1×b2 + a2×b1 + a3×b0 + 19×a4×b4
+        let r3 = bits::mul64(a0, b3);
+        let r3 = bits::add_mul64(r3, a1, b2);
+        let r3 = bits::add_mul64(r3, a2, b1);
+        let r3 = bits::add_mul64(r3, a3, b0);
+        let r3 = bits::add_mul64(r3, a4_19, b4);
+
+        // r4 = a0×b4 + a1×b3 + a2×b2 + a3×b1 + a4×b0
+        let r4 = bits::mul64(a0, b4);
+        let r4 = bits::add_mul64(r4, a1, b3);
+        let r4 = bits::add_mul64(r4, a2, b2);
+        let r4 = bits::add_mul64(r4, a3, b1);
+        let r4 = bits::add_mul64(r4, a4, b0);
+
+        // After the multiplication, we need to reduce (carry) the five coefficients
+        // to obtain a result with limbs that are at most slightly larger than 2⁵¹,
+        // to respect the Element invariant.
+        //
+        // Overall, the reduction works the same as carryPropagate, except with
+        // wider inputs: we take the carry for each coefficient by shifting it right
+        // by 51, and add it to the limb above it. The top carry is multiplied by 19
+        // according to the reduction identity and added to the lowest limb.
+        //
+        // The largest coefficient (r0) will be at most 111 bits, which guarantees
+        // that all carries are at most 111 - 51 = 60 bits, which fits in a uint64.
+        //
+        //     r0 = a0×b0 + 19×(a1×b4 + a2×b3 + a3×b2 + a4×b1)
+        //     r0 < 2⁵²×2⁵² + 19×(2⁵²×2⁵² + 2⁵²×2⁵² + 2⁵²×2⁵² + 2⁵²×2⁵²)
+        //     r0 < (1 + 19 × 4) × 2⁵² × 2⁵²
+        //     r0 < 2⁷ × 2⁵² × 2⁵²
+        //     r0 < 2¹¹¹
+        //
+        // Moreover, the top coefficient (r4) is at most 107 bits, so c4 is at most
+        // 56 bits, and c4 * 19 is at most 61 bits, which again fits in a uint64 and
+        // allows us to easily apply the reduction identity.
+        //
+        //     r4 = a0×b4 + a1×b3 + a2×b2 + a3×b1 + a4×b0
+        //     r4 < 5 × 2⁵² × 2⁵²
+        //     r4 < 2¹⁰⁷
+        //
+
+        let c0 = Element::shift_right_51(&r0);
+        let c1 = Element::shift_right_51(&r1);
+        let c2 = Element::shift_right_51(&r2);
+        let c3 = Element::shift_right_51(&r3);
+        let c4 = Element::shift_right_51(&r4);
+
+        let rr0 = (r0.lo & Element::MASK_LOW_51BITS) + (c4 * 19);
+        let rr1 = (r1.lo & Element::MASK_LOW_51BITS) + c0;
+        let rr2 = (r2.lo & Element::MASK_LOW_51BITS) + c1;
+        let rr3 = (r3.lo & Element::MASK_LOW_51BITS) + c2;
+        let rr4 = (r4.lo & Element::MASK_LOW_51BITS) + c3;
+
+        // Now all coefficients fit into 64-bit registers but are still too large to
+        // be passed around as an Element. We therefore do one last carry chain,
+        // where the carries will be small enough to fit in the wiggle room above 2⁵¹.
+        let mut v: Element = Element(rr0, rr1, rr2, rr3, rr4);
+        v.carry_propagate();
+        v
+    }
+
+    // calculate x * x.
+    pub fn square(a: &Element) -> Element {
+        let l0 = a.0;
+        let l1 = a.1;
+        let l2 = a.2;
+        let l3 = a.3;
+        let l4 = a.4;
+
+        // Squaring works precisely like multiplication above, but thanks to its
+        // symmetry we get to group a few terms together.
+        //
+        //                          l4   l3   l2   l1   l0  x
+        //                          l4   l3   l2   l1   l0  =
+        //                         ------------------------
+        //                        l4l0 l3l0 l2l0 l1l0 l0l0  +
+        //                   l4l1 l3l1 l2l1 l1l1 l0l1       +
+        //              l4l2 l3l2 l2l2 l1l2 l0l2            +
+        //         l4l3 l3l3 l2l3 l1l3 l0l3                 +
+        //    l4l4 l3l4 l2l4 l1l4 l0l4                      =
+        //   ----------------------------------------------
+        //      r8   r7   r6   r5   r4   r3   r2   r1   r0
+        //
+        //            l4l0    l3l0    l2l0    l1l0    l0l0  +
+        //            l3l1    l2l1    l1l1    l0l1 19×l4l1  +
+        //            l2l2    l1l2    l0l2 19×l4l2 19×l3l2  +
+        //            l1l3    l0l3 19×l4l3 19×l3l3 19×l2l3  +
+        //            l0l4 19×l4l4 19×l3l4 19×l2l4 19×l1l4  =
+        //           --------------------------------------
+        //              r4      r3      r2      r1      r0
+        //
+        // With precomputed 2×, 19×, and 2×19× terms, we can compute each limb with
+        // only three Mul64 and four Add64, instead of five and eight.
+
+        let l0_2 = l0 * 2;
+        let l1_2 = l1 * 2;
+
+        let l1_38 = l1 * 38;
+        let l2_38 = l2 * 38;
+        let l3_38 = l3 * 38;
+
+        let l3_19 = l3 * 19;
+        let l4_19 = l4 * 19;
+
+        // r0 = l0×l0 + 19×(l1×l4 + l2×l3 + l3×l2 + l4×l1) = l0×l0 + 19×2×(l1×l4 + l2×l3)
+        let r0 = bits::mul64(l0, l0);
+        let r0 = bits::add_mul64(r0, l1_38, l4);
+        let r0 = bits::add_mul64(r0, l2_38, l3);
+
+        // r1 = l0×l1 + l1×l0 + 19×(l2×l4 + l3×l3 + l4×l2) = 2×l0×l1 + 19×2×l2×l4 + 19×l3×l3
+        let r1 = bits::mul64(l0_2, l1);
+        let r1 = bits::add_mul64(r1, l2_38, l4);
+        let r1 = bits::add_mul64(r1, l3_19, l3);
+
+        // r2 = l0×l2 + l1×l1 + l2×l0 + 19×(l3×l4 + l4×l3) = 2×l0×l2 + l1×l1 + 19×2×l3×l4
+        let r2 = bits::mul64(l0_2, l2);
+        let r2 = bits::add_mul64(r2, l1, l1);
+        let r2 = bits::add_mul64(r2, l3_38, l4);
+
+        // r3 = l0×l3 + l1×l2 + l2×l1 + l3×l0 + 19×l4×l4 = 2×l0×l3 + 2×l1×l2 + 19×l4×l4
+        let r3 = bits::mul64(l0_2, l3);
+        let r3 = bits::add_mul64(r3, l1_2, l2);
+        let r3 = bits::add_mul64(r3, l4_19, l4);
+
+        // r4 = l0×l4 + l1×l3 + l2×l2 + l3×l1 + l4×l0 = 2×l0×l4 + 2×l1×l3 + l2×l2
+        let r4 = bits::mul64(l0_2, l4);
+        let r4 = bits::add_mul64(r4, l1_2, l3);
+        let r4 = bits::add_mul64(r4, l2, l2);
+
+        let c0 = Element::shift_right_51(&r0);
+        let c1 = Element::shift_right_51(&r1);
+        let c2 = Element::shift_right_51(&r2);
+        let c3 = Element::shift_right_51(&r3);
+        let c4 = Element::shift_right_51(&r4);
+
+        let rr0 = (r0.lo & Element::MASK_LOW_51BITS) + c4*19;
+        let rr1 = (r1.lo & Element::MASK_LOW_51BITS) + c0;
+        let rr2 = (r2.lo & Element::MASK_LOW_51BITS) + c1;
+        let rr3 = (r3.lo & Element::MASK_LOW_51BITS) + c2;
+        let rr4 = (r4.lo & Element::MASK_LOW_51BITS) + c3;
+
+        let mut v: Element = Element(rr0, rr1, rr2, rr3, rr4);
+        v.carry_propagate();
+        v
+    }
+
+    // calculate 1/x mod p.
+    // If x == 0, returns 0.
+    // Inversion is implemented as exponentiation with exponent p − 2. It uses the
+    // same sequence of 254 squarings and 11 multiplications as mentioned in [Curve25519].
+    pub fn invert(&mut self, x: &Element) -> Element {
+        let x2 = Element::square(x);                    // x^2
+        let mut t = Element::square(&x2);               // x^4
+        t = Element::square(&t);                        // x^8
+        let x9 = Element::multiply(&t, &x);              // x^9
+        let x11 = Element::multiply(&x9, &x2);          // x^11
+        t = Element::square(&x11);                      // x^22
+        let x2_5_0 = Element::multiply(&t, &x9);        // x^31 = x^(2^5 - 2^0)
+
+        t = Element::square(&x2_5_0);                   // x^(2^6 - 2^1)
+        // t0 = (2^7 - 2^2); t1 = (2^8 - 2^3); t2 = (2^9 - 2^4); t3 = (2^10 - 2^5)
+        for _ in 0..4 {
+            t = Element::square(&t);                    // x^(2^10 - 2^5)
+        }
+        let x2_10_0 = Element::multiply(&t, &x2_5_0);   // x^(2^10 - 2^0) = x^(2^10 - 2^5) * x^(2^5 - 2^0)
+
+        t = Element::square(&x2_10_0);                  // x^(2^11 - 2^1)
+        for _  in 0..9 {
+            t = Element::square(&t);                    // x^(2^20 - 2^10)
+        }
+        let x2_20_0 = Element::multiply(&t, &x2_10_0);  // x^(2^20 - 2^0) = x^(2^20 - 2^10) * x^(2^10 - 2^0)
+
+        t = Element::square(&x2_20_0);                  // x^(2^21 - 2^1)
+        for _ in 0..19 {
+            t = Element::square(&t);                    // x^(2^40 - 2^20)
+        }
+        t = Element::multiply(&t, &x2_20_0);            // x^(2^40 - 2^0) = x^(2^40 - 2^20) * x^(2^20 - 2^0)
+
+        t = Element::square(&t);                        // x^(2^41 - 2^1)
+        for _ in 0..9 {
+            t = Element::square(&t);                    // x^(2^50 - 2^10)
+        }
+        let x2_50_0 = Element::multiply(&t, &x2_10_0);  // x^(2^50 - 2^0) = x^(2^50 - 2^10) * x^(2^10 - 2^0)
+
+        t = Element::square(&x2_50_0);                  // x^(2^51 - 2^1)
+        for _ in 0..49 {
+            t = Element::square(&t);                    // x^(2^100 - 2^50)
+        }
+        let x2_100_0 = Element::multiply(&t, &x2_50_0); // x^(2^100 - 2^0) = x^(2^100 - 2^50) * x^(2^50 - 2^0)
+
+        t = Element::square(&x2_100_0);                 // x^(2^101 - 2^1)
+        for _ in 0..99 {
+            t = Element::square(&t);                    // x^(2^200 - 2^100)
+        }
+        t = Element::multiply(&t, &x2_100_0);           // x^(2^200 - 2^0) = x^(2^200 - 2^100) * x^(2^100 - 2^0)
+
+        t = Element::square(&t);                        // x^(2^201 - 2^1)
+        for _ in 0..49 {
+            t = Element::square(&t);                    // x^(2^250 - 2^50)
+        }
+        t = Element::multiply(&t, &x2_50_0);            // x^(2^250 - 2^0) = x^(2^250 - 2^50) * x^(2^50 - 2^0)
+
+        t = Element::square(&t);                        // x^(2^251 - 2^1)
+        t = Element::square(&t);                        // x^(2^252 - 2^2)
+        t = Element::square(&t);                        // x^(2^253 - 2^3)
+        t = Element::square(&t);                        // x^(2^254 - 2^4)
+        t = Element::square(&t);                        // x^(2^255 - 2^5)
+
+        Element::multiply(&t, &x11)                     // x^(2^255 - 21) = x^(2^255 - 2^5) * x^11
     }
 
     // reduce value modulo 2^255 - 19
@@ -96,7 +383,7 @@ impl Element {
         self
     }
 
-    pub fn carry_propagate(&mut self) -> &Self {
+    pub fn carry_propagate(&mut self) {
         let c0 = self.0 >> 51;
         let c1 = self.1 >> 51;
         let c2 = self.2 >> 51;
@@ -108,8 +395,6 @@ impl Element {
         self.2 = (self.2 & Element::MASK_LOW_51BITS) + c1;
         self.3 = (self.3 & Element::MASK_LOW_51BITS) + c2;
         self.4 = (self.4 & Element::MASK_LOW_51BITS) + c3;
-
-        self
     }
 
     pub fn to_le_bytes(&self) -> [u8; 32] {
