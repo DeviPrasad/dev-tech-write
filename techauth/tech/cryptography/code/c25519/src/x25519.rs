@@ -4,26 +4,27 @@ use crate::subtle;
 // scalar: little endian sequence of bytes
 // point: little endian sequence of bytes
 pub fn scalar_mul(scalar: [u8; 32], point: [u8; 32], dst: &mut [u8; 32]) {
-    let mut e: [u8; 32] = [0; 32];
+    fn scalar_clamp(scalar: [u8; 32]) -> [u8; 32] {
+        let mut clamped: [u8; 32] = scalar.clone();
+        clamped[0] &= 0xF8;
+        clamped[31] = (clamped[31] & 0x7F) | 0x40;
+        clamped
+    }
 
-    e.copy_from_slice(&scalar);
-    e[0] &= 248;
-    e[31] &= 127;
-    e[31] |= 64;
-
+    let clamped = scalar_clamp(scalar);
     let x1 = field::Element::from_le_bytes(point);
     let mut x2 = field::Element::ONE.clone();
     let mut x3 = x1.clone();
     let mut z2 = field::Element::ZERO.clone();
     let mut z3 = field::Element::ONE.clone();
     let mut swap: u32 = 0;
+
     for pos in (0..=254).rev() {
-        let b: u32 = (e[pos/8] >> (pos & 7)) as u32;
-        let b = b & 1;
-        swap ^= b;
+        let bit: u32 = ((clamped[pos/8] >> (pos & 7)) & 1) as u32;
+        swap ^= bit;
         field::Element::swap(&mut x2, &mut x3, swap);
         field::Element::swap(&mut z2, &mut z3, swap);
-        swap = b;
+        swap = bit;
 
         let t0 = field::Element::subtract(&x3, &z3);
         let t1 = field::Element::subtract(&x2, &z2);
