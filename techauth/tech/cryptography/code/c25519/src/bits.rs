@@ -67,18 +67,21 @@ pub fn mul64(x: u64, y: u64) -> Uint128 {
 
 // The carry input must be 0 or 1; otherwise the behavior is undefined.
 // carry_out is guaranteed to be 0 or 1.
-// Note: carrying_add is unstable as of rust 1.75.
 // This function's execution time does not depend on the inputs.
 pub fn add64(x: u64, y: u64, carry: u64) -> (u64, u64) {
-    if carry > 1 {
-        panic!("add64: carry argument value must be 0 or 1");
-    }
-    let sum: u64 = x + y + carry;
+    assert!(carry <= 1);
+    //
+    // This golang implementation is replaced using Rust's 128-bit arithmetic.
+    // let sum: u64 = x + y + carry;
     // The sum will overflow if both top bits are set (x & y) or if one of them
     // is (x | y), and a carry from the lower place happened. If such a carry
     // happens, the top bit of sum will be zero (1 + 0 + 1 = 0).
-    let carry_out: u64 = ((x & y) | ((x | y) & !sum)) >> 63;
-    (sum, carry_out)
+    // let carry_out: u64 = ((x & y) | ((x | y) & !sum)) >> 63;
+    //
+    let sum: u128 = x as u128 + y as u128 + carry as u128;
+    let carry_out: u64 = (sum >> 64) as u64;
+    assert!(carry_out <= 1);
+    (sum as u64, carry_out)
 }
 
 // addMul64 returns v + a * b.

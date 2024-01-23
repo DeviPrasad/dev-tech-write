@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::{binary, bits::{self, Uint128}};
+use crate::{binary, bits::{self, Uint128}, subtle};
 
 // Element represents an element of the field GF(2^255-19).
 // An element is represented as a radix-2^51 value.
@@ -38,34 +38,59 @@ impl Element {
     }
 
     // assign self to (a + b)
-    pub fn add(&mut self, a: &Element, b: &Element) {
-        self.0 = a.0 + b.0;
-        self.1 = a.1 + b.1;
-        self.2 = a.2 + b.2;
-        self.3 = a.3 + b.3;
-        self.4 = a.4 + b.4;
-
-        self.carry_propagate();
+    pub fn add(a: &Element, b: &Element) -> Element {
+        let mut v: Element = Element(a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3, a.4 + b.4);
+        v.carry_propagate();
+        v
     }
 
     // assign self to (a - b)
-    pub fn subtract(&mut self, a: &Element, b: &Element) {
-        self.0 = (a.0 + 0xFFFFFFFFFFFDA) - b.0;
-        self.1 = (a.1 + 0xFFFFFFFFFFFFE) - b.1;
-        self.2 = (a.2 + 0xFFFFFFFFFFFFE) - b.2;
-        self.3 = (a.3 + 0xFFFFFFFFFFFFE) - b.3;
-        self.4 = (a.4 + 0xFFFFFFFFFFFFE) - b.4;
-
-        self.carry_propagate();
+    pub fn subtract(a: &Element, b: &Element) -> Element {
+        let mut v: Element = Element(
+            (a.0 + 0xFFFFFFFFFFFDA) - b.0,
+            (a.1 + 0xFFFFFFFFFFFFE) - b.1,
+            (a.2 + 0xFFFFFFFFFFFFE) - b.2,
+            (a.3 + 0xFFFFFFFFFFFFE) - b.3,
+            (a.4 + 0xFFFFFFFFFFFFE) - b.4);
+        v.carry_propagate();
+        v
     }
 
     // assign self to -a
-    pub fn negate(&mut self, a: &Element) {
-        self.subtract(Element::ZERO, a);
+    pub fn negate(a: &Element) -> Element {
+        Element::subtract(Element::ZERO, a)
     }
 
     pub fn shift_right_51(a: &Uint128) -> u64 {
         (a.hi << (64 - 51)) | (a.lo >> 51)
+    }
+
+    // mul32 sets v = x * y, and returns v.
+    pub fn mul32(x: &Element, y: u32) -> Element {
+        let (x0lo, x0hi) = Element::mul51(x.0, y);
+        let (x1lo, x1hi) = Element::mul51(x.1, y);
+        let (x2lo, x2hi) = Element::mul51(x.2, y);
+        let (x3lo, x3hi) = Element::mul51(x.3, y);
+        let (x4lo, x4hi) = Element::mul51(x.4, y);
+
+        // The hi portions are going to be only 32 bits, plus any previous excess,
+        // so we can skip the carry propagation.
+        let mut v = Element(
+            x0lo + (19 * x4hi), // carried over per the reduction identity
+            x1lo + x0hi,
+            x2lo + x1hi,
+            x3lo + x2hi,
+            x4lo + x3hi);
+        v.carry_propagate();
+        v
+    }
+
+    // returns lo + hi * 2⁵¹ = a * b.
+    pub fn mul51(a: u64, b: u32) -> (u64, u64) {
+        let prod: Uint128 = bits::mul64(a, b as u64);
+        let lo = prod.lo & Element::MASK_LOW_51BITS;
+        let hi = (prod.hi << 13) | (prod.lo >> 51);
+        (lo, hi)
     }
 
     // calculate x * y.
@@ -290,7 +315,7 @@ impl Element {
     // If x == 0, returns 0.
     // Inversion is implemented as exponentiation with exponent p − 2. It uses the
     // same sequence of 254 squarings and 11 multiplications as mentioned in [Curve25519].
-    pub fn invert(&mut self, x: &Element) -> Element {
+    pub fn invert(x: &Element) -> Element {
         let x2 = Element::square(x);                    // x^2
         let mut t = Element::square(&x2);               // x^4
         t = Element::square(&t);                        // x^8
@@ -459,6 +484,50 @@ impl Element {
         el.init_from_le_bytes(b);
         el
     }
+
+    // returns 1 if v and u are equal, and 0 otherwise.
+    pub fn equal(&self, u: &Element) -> bool {
+        let (sa, sv) = (u.to_le_bytes(), self.to_le_bytes());
+        subtle::constant_time_compare(&sa, &sv)
+    }
+
+    // returns 0xFFFFFFFFFFFFFFFF if cond is 1, and 0 otherwise.
+    pub fn mask_64bits(cond: u32) -> u64 {
+        if cond == 1 {
+            0xFFFFFFFFFFFFFFFF
+        } else {
+            0
+        }
+    }
+
+    // Select sets v to a if cond == 1, and to b if cond == 0.
+    pub fn select(&mut self, a: &Element, b: &Element, cond: u32) {
+        let m = Element::mask_64bits(cond);
+        self.0 = (m & a.0) | (!m & b.0);
+        self.1 = (m & a.1) | (!m & b.1);
+        self.2 = (m & a.2) | (!m & b.2);
+        self.3 = (m & a.3) | (!m & b.3);
+        self.4 = (m & a.4) | (!m & b.4);
+}
+
+pub fn swap(s: &mut Element, u: &mut Element, cond: u32) {
+        let m: u64 = Element::mask_64bits(cond);
+        let t = m & (s.0 ^ u.0);
+        s.0 ^= t;
+        u.0 ^= t;
+        let t = m & (s.1 ^ u.1);
+        s.1 ^= t;
+        u.1 ^= t;
+        let t = m & (s.2 ^ u.2);
+        s.2 ^= t;
+        u.2 ^= t;
+        let t = m & (s.3 ^ u.3);
+        s.3 ^= t;
+        u.3 ^= t;
+        let t = m & (s.4 ^ u.4);
+        s.4 ^= t;
+        u.4 ^= t;
+    }
 }
 
 #[cfg(test)]
@@ -545,5 +614,23 @@ mod field_test {
         let el = Element(84926274344903, 473620666599931, 365590438845504, 1028470286882429, 2146499180330972);
         let bytes = el.to_le_bytes();
         assert_eq!(expect, bytes);
+    }
+
+    #[test]
+    fn test_swap_01() {
+        let mut a = Element(358744748052810, 1691584618240980, 977650209285361, 1429865912637724, 560044844278676);
+        let mut b = Element(84926274344903, 473620666599931, 365590438845504, 1028470286882429, 2146499180330972);
+
+        let mut c = Element::ZERO.clone();
+        let mut d = Element::ZERO.clone();
+
+        c.select(&mut a, &mut b, 1);
+        d.select(&mut a, &mut b, 0);
+
+        assert!(c.equal(&a) && d.equal(&b));
+        Element::swap(&mut c, &mut d, 0);
+        assert!(c.equal(&a) && d.equal(&b));
+        Element::swap(&mut c, &mut d, 1);
+        assert!(c.equal(&b) && d.equal(&a));
     }
 }
