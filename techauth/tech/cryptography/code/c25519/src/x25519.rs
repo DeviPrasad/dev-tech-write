@@ -114,43 +114,145 @@ mod test_x25519 {
         r.unwrap()
     }
 
-    fn test_x25519_failure(private: [u8; 32], public: [u8; 32]) {
-        let pr_key = PrivateKey::new(private);
-        let pub_key = PublicKey::new(public);
-        let res = pr_key.ecdh(&pub_key);
-        assert!(matches!(res, Err(())));
-    }
 
     #[test]
-    fn test_failure() {
+    fn test_failure_01() {
+        fn _test_x25519_fail_(private: [u8; 32], public: [u8; 32]) {
+            let pr_key = PrivateKey::new(private);
+            let pub_key = PublicKey::new(public);
+            let res = pr_key.ecdh(&pub_key);
+            assert!(matches!(res, Err(())));
+        }
+
         let identity: &[u8] = &hex_decode("0000000000000000000000000000000000000000000000000000000000000000");
         let low_order_point: &[u8] = &hex_decode("e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800");
-        let mut random_scalar: [u8; 32] = [0; 32];
 
+        let mut random_scalar: [u8; 32] = [0; 32];
         rand::thread_rng().fill(&mut random_scalar);
-        test_x25519_failure(random_scalar, identity.try_into().unwrap());
-        test_x25519_failure(random_scalar, low_order_point.try_into().unwrap());
+
+        _test_x25519_fail_(random_scalar, identity.try_into().unwrap());
+        _test_x25519_fail_(random_scalar, low_order_point.try_into().unwrap());
     }
 
-    // X25519 test vector from RFC 7748, Section 6.1.
+    // https://github.com/AdoptOpenJDK/openjdk-jdk/blob/master/test/jdk/sun/security/ec/xec/TestXDH.java
     #[test]
-    fn test_x25519_rfc7748() {
-        let pr_key_hex = "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a";
-        let pub_key_hex = "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a";
-        let peer_pub_key_hex = "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f";
-        let ss_hex = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742";
+    fn test_failure_02() {
+        fn _test_x25519_failure_(pr_key_hex: &str, peer_pub_key_hex: &str) {
+            let pr_key_bytes: [u8; 32] = hex_decode(pr_key_hex).try_into().unwrap();
+            let pr_key = PrivateKey::new(pr_key_bytes);
+            let peer_pub_key_bytes: [u8; 32] = hex_decode(peer_pub_key_hex).try_into().unwrap();
+            let peer_pub_key = PublicKey::new(peer_pub_key_bytes);
+            let ecdh_res = pr_key.ecdh(&peer_pub_key);
+            assert!(matches!(ecdh_res, Err(())));
+        }
 
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "5F9C95BCA3508C24B1D0B1559C83EF5B04445CC4581C8E86D8224EDDD09F1157";
+            _test_x25519_failure_(pr_key_hex, peer_pub_key_hex);
+        }
+
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "0100000000000000000000000000000000000000000000000000000000000000";
+            _test_x25519_failure_(pr_key_hex, peer_pub_key_hex);
+        }
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "ECFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F";
+            _test_x25519_failure_(pr_key_hex, peer_pub_key_hex);
+        }
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "5F9C95BCA3508C24B1D0B1559C83EF5B04445CC4581C8E86D8224EDDD09F1157";
+            _test_x25519_failure_(pr_key_hex, peer_pub_key_hex);
+        }
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "E0EB7A7C3B41B8AE1656E3FAF19FC46ADA098DEB9C32B1FD866205165F49B800";
+            _test_x25519_failure_(pr_key_hex, peer_pub_key_hex);
+        }
+    }
+
+    fn _test_x25519_success_(pr_key_hex: &str, peer_pub_key_hex: &str, ss_hex: &str) {
         let pr_key_bytes: [u8; 32] = hex_decode(pr_key_hex).try_into().unwrap();
         let pr_key = PrivateKey::new(pr_key_bytes);
-
-        let expected_pub_key_bytes: [u8; 32] = hex_decode(pub_key_hex).try_into().unwrap();
-        let pub_key = pr_key.public_key();
-        assert_eq!(pub_key.public, expected_pub_key_bytes);
 
         let expected_ss_bytes: [u8; 32] = hex_decode(ss_hex).try_into().unwrap();
         let peer_pub_key_bytes: [u8; 32] = hex_decode(peer_pub_key_hex).try_into().unwrap();
         let peer_pub_key = PublicKey::new(peer_pub_key_bytes);
         let ecdh_res = pr_key.ecdh(&peer_pub_key);
         assert!(matches!(ecdh_res, Ok(ss) if ss == expected_ss_bytes));
+    }
+
+    // X25519 test vector from RFC 7748, Section 6.1.
+    #[test]
+    fn test_x25519_rfc7748() {
+        let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+        let pub_key_hex = "8520F0098930A754748B7DDCB43EF75A0DBF3A0D26381AF4EBA4A98EAA9B4E6A";
+        let peer_pub_key_hex = "DE9EDB7D7B7DC1B4D35B61C2ECE435373F8343C85B78674DADFC7E146F882B4F";
+        let ss_hex = "4A5D9D5BA4CE2DE1728E3BF480350F25E07E21C947D19E3376F09B3C1E161742";
+
+        _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+
+        {
+            let pr_key_bytes: [u8; 32] = hex_decode(pr_key_hex).try_into().unwrap();
+            let pr_key = PrivateKey::new(pr_key_bytes);
+            let expected_pub_key_bytes: [u8; 32] = hex_decode(pub_key_hex).try_into().unwrap();
+            let pub_key = pr_key.public_key();
+            assert_eq!(pub_key.public, expected_pub_key_bytes);
+        }
+    }
+
+    // https://github.com/AdoptOpenJDK/openjdk-jdk/blob/master/test/jdk/sun/security/ec/xec/TestXDH.java
+    #[test]
+    fn test_x25519_01() {
+        {
+            let pr_key_hex = "A546E36BF0527C9D3B16154B82465EDD62144C0AC1FC5A18506A2244BA449AC4";
+            let peer_pub_key_hex = "E6DB6867583030DB3594C1A424B15F7C726624EC26B3353B10A903A6D0AB1C4C";
+            let ss_hex = "C3DA55379DE9C6908E94EA4DF28D084F32ECCF03491C71F754B4075577A28552";
+
+            _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+        }
+
+        {
+            let pr_key_hex = "4B66E9D4D1B4673C5AD22691957D6AF5C11B6421E0EA01D42CA4169E7918BA0D";
+            let peer_pub_key_hex = "E5210F12786811D3F4B7959D0538AE2C31DBE7106FC03C3EFC4CD549C715A493";
+            let ss_hex = "95CBDE9476E8907D7AADE45CB4B873F88B595A68799FA152E6F8F7647AAC7957";
+
+            _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+        }
+
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "FEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F";
+            let ss_hex = "81A02A45014594332261085128959869FC0540C6B12380F51DB4B41380DE2C2C";
+
+            _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+        }
+
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "DE9EDB7D7B7DC1B4D35B61C2ECE435373F8343C85B78674DADFC7E146F882B8F";
+            let ss_hex = "954E472439316F118AE158B65619EECFF9E6BCF51AB29ADD66F3FD088681E233";
+
+            _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+        }
+
+        {
+            let pr_key_hex = "77076D0A7318A57D3C16C17251B26645DF4C2F87EBC0992AB177FBA51DB92C2A";
+            let peer_pub_key_hex = "DE9EDB7D7B7DC1B4D35B61C2ECE435373F8343C85B78674DADFC7E146F882B4F";
+            let ss_hex = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742";
+
+            _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+        }
+
+        {
+            let pr_key_hex = "5DAB087E624A8A4B79E17F8B83800EE66F3BB1292618B6FD1C2F8B27FF88E0EB";
+            let peer_pub_key_hex = "8520F0098930A754748B7DDCB43EF75A0DBF3A0D26381AF4EBA4A98EAA9B4E6A";
+            let ss_hex = "4A5D9D5BA4CE2DE1728E3BF480350F25E07E21C947D19E3376F09B3C1E161742";
+
+            _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+        }
     }
 }
