@@ -61,7 +61,7 @@ impl Element {
         Element::subtract(Element::ZERO, a)
     }
 
-    pub fn shift_right_51(a: &Uint128) -> u64 {
+    pub fn shift_u128_to_u64(a: &Uint128) -> u64 {
         (a.hi << (64 - 51)) | (a.lo >> 51)
     }
 
@@ -206,11 +206,11 @@ impl Element {
         //     r4 < 2¹⁰⁷
         //
 
-        let c0 = Element::shift_right_51(&r0);
-        let c1 = Element::shift_right_51(&r1);
-        let c2 = Element::shift_right_51(&r2);
-        let c3 = Element::shift_right_51(&r3);
-        let c4 = Element::shift_right_51(&r4);
+        let c0: u64 = Element::shift_u128_to_u64(&r0);
+        let c1: u64 = Element::shift_u128_to_u64(&r1);
+        let c2: u64 = Element::shift_u128_to_u64(&r2);
+        let c3: u64 = Element::shift_u128_to_u64(&r3);
+        let c4: u64 = Element::shift_u128_to_u64(&r4);
 
         let rr0 = (r0.lo & Element::MASK_LOW_51BITS) + (c4 * 19);
         let rr1 = (r1.lo & Element::MASK_LOW_51BITS) + c0;
@@ -294,13 +294,13 @@ impl Element {
         let r4 = bits::add_mul64(r4, l1_2, l3);
         let r4 = bits::add_mul64(r4, l2, l2);
 
-        let c0 = Element::shift_right_51(&r0);
-        let c1 = Element::shift_right_51(&r1);
-        let c2 = Element::shift_right_51(&r2);
-        let c3 = Element::shift_right_51(&r3);
-        let c4 = Element::shift_right_51(&r4);
+        let c0: u64 = Element::shift_u128_to_u64(&r0);
+        let c1: u64 = Element::shift_u128_to_u64(&r1);
+        let c2: u64 = Element::shift_u128_to_u64(&r2);
+        let c3: u64 = Element::shift_u128_to_u64(&r3);
+        let c4: u64 = Element::shift_u128_to_u64(&r4);
 
-        let rr0 = (r0.lo & Element::MASK_LOW_51BITS) + c4*19;
+        let rr0 = (r0.lo & Element::MASK_LOW_51BITS) + (c4 * 19);
         let rr1 = (r1.lo & Element::MASK_LOW_51BITS) + c0;
         let rr2 = (r2.lo & Element::MASK_LOW_51BITS) + c1;
         let rr3 = (r3.lo & Element::MASK_LOW_51BITS) + c2;
@@ -319,7 +319,7 @@ impl Element {
         let x2 = Element::square(x);                    // x^2
         let mut t = Element::square(&x2);               // x^4
         t = Element::square(&t);                        // x^8
-        let x9 = Element::multiply(&t, &x);              // x^9
+        let x9 = Element::multiply(&t, &x);             // x^9
         let x11 = Element::multiply(&x9, &x2);          // x^11
         t = Element::square(&x11);                      // x^22
         let x2_5_0 = Element::multiply(&t, &x9);        // x^31 = x^(2^5 - 2^0)

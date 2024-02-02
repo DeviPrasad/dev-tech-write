@@ -1,0 +1,58 @@
+
+What is Montgomery's modular multiplication without trial division?
+
+In 1985, Peter L. Montgomery introduced an innovative technique to simplify arithmetic operations, particularly modular multiplications, for representing Z/nZ numbers. He proposed the use of an integer r and the modulus n we are working with, provided that r is greater than n and their greatest common divisor is 1. This method was detailed in his paper titled "Modular multiplication without trial division".
+
+
+What is Montgomery reduction in cryptography?
+
+The Montgomery reduction is a process that reduces a number u (where u is between 0 and r^n-1) to a residue modulo n, denoted by Redc(u)= (u*r^-1) mod n. This process is also known as n-residue with respect to r, and it is interesting to note that this set forms a complete residue system. In Cryptography, prime modulus is typically used which allows us to select r=2^k.
+
+What is the Montgomery reduction of U?
+
+The process of Montgomery reduction involves computing the n-residue of u with respect to r, where u belongs to the range of [0, rn-1]. It can be expressed as Redc(u) = (ur-1) mod n.
+
+ 
+
+Why is Montgomery Ladder fast on Montgomery Curves?
+
+Upon examining the Montgomery Ladder algorithm, I observe that it does not contain anything unique to the Montgomery curve. Throughout the process, we only manipulate points by either adding two points or doubling a point, regardless of their belonging to any form of elliptic curve . Despite this, many papers argue that the Montgomery ladder is most efficient when used on Montgomery curves. I am uncertain of what I am overlooking. 
+
+
+Elliptic curves can be expressed in various forms, but the fundamental equation that represents every curve is the Weierstraß equation.
+
+The equation can be written as $y^2 = x^3 + ax + b$, where $a$ and $b$ are constants. 
+In order for a curve to be classified as a Montgomery curve, it is required to have the ability to be expressed in the given format:
+
+The equation represented as by^2 = x^3 + ax^2 + x involves the variables x and y.
+
+It is feasible to convert the equation of a Montgomery curve to Weierstraß, however, the reverse is not true. Hence, it is not accurate to say that all elliptic curves are Montgomery curves
+
+The Montgomery ladder is exclusive to Montgomery curves and can be considered as a variation of the Double and Add-procedure, utilizing constant time. Other variations and ladders also exist for various elliptic curves , but they must be designated with unique names, as demonstrated in SafeCurves. 
+
+Differential addition on Montgomery curve, Point multiplication using Montgomery ladder technique over Montgomery curves only require x coordinate, which in many situation leads to faster implementation as compared to point multiplication over standard curves. However, to compute point multiplication over Montgomery curves, a differential …
+
+
+Montgomery Ladder
+
+Paper by Mike Hamburg presented at CHES 2020 See https://iacr.org/cryptodb/data/paper.php?pubkey=30552.The conference program is at https://ches.iacr.org/2020
+
+ The speed of this method is not superior to the speed of arithmetic used in typical Weierstrass equations. Montgomery's initial publication introduced projective arithmetic operations for the addition and doubling of points.
+
+I have a few initial inquiries regarding the projective arithmetic and ladder technique. Firstly, does the absence of division in projective arithmetic make it faster? Secondly, is the ladder technique able to maintain constant time due to the absence of division? Lastly, would the ladder technique with affine coordinates not have constant time? My hypothesis is that calculating an inverse in a field involves using the Euclidean algorithm, which is not the most efficient and cannot be computed in constant time. This is because division in a field is essentially a multiplication with an inverse.
+
+While researching, I came across Bernstein's work in which he discusses an optimized double and add formula. He illustrates this formula in his paper and also in Curve25519. 
+
+
+ Achieving accuracy, the montgomery ladder can be utilized for both affine and projective coordinates. To optimize implementation and reuse already computed results, Bernstein devised a graph specifically for the projective montgomery ladder. My attempt was to convert the graph into pseudocode. 
+
+
+ {"ver":"2.0.0","txnid":"ca9017ca-7290-49d7-9a08-1b860f49ef34","sessionId":"zfjGs2BVS9GQq4imZzpuig","fipId":"fip_a32ef1af-18c0-471d-b494-6e918fa8ba00_AlphaDigiFinBank","linkRefNum":["SqrVhuCsQlmoiiIn5Pgpiw","R_0tJRgqQDGGVT4kXFli_A"]}
+
+
+
+
+
+
+
+

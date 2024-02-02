@@ -84,7 +84,7 @@ pub fn add64(x: u64, y: u64, carry: u64) -> (u64, u64) {
     (sum as u64, carry_out)
 }
 
-// addMul64 returns v + a * b.
+// addMul64 returns v + x * y.
 pub fn add_mul64(v: Uint128, x: u64, y: u64) -> Uint128 {
     let r: Uint128 = mul64(x, y);
     let (lo, c) = add64(r.lo, v.lo, 0);
