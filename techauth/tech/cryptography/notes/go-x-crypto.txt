@@ -1,0 +1,5 @@
+
+Issue https://github.com/golang/go/issues/65250 mentions the following:
+golang.org/x/crypto/curve25519 and golang.org/x/crypto/ed25519: wrappers for crypto/ecdh and crypto/ed25519 respectively
+
+
