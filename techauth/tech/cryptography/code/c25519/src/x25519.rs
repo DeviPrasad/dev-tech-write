@@ -20,7 +20,7 @@ pub fn scalar_mul(scalar: [u8; 32], point: [u8; 32], dst: &mut [u8; 32]) {
     let mut swap: u32 = 0;
 
     for pos in (0..=254).rev() {
-        let bit: u32 = ((clamped[pos/8] >> (pos & 7)) & 1) as u32;
+        let bit: u32 = ((clamped[pos / 8] >> (pos & 7)) & 1) as u32;
         swap ^= bit;
         field::Element::swap(&mut x2, &mut x3, swap);
         field::Element::swap(&mut z2, &mut z3, swap);
@@ -73,7 +73,7 @@ impl PrivateKey {
     }
 
     pub fn public_key(&self) -> PublicKey {
-        let x25519_base_point: [u8; 32]= [
+        let x25519_base_point: [u8; 32] = [
             9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
         assert_eq!(x25519_base_point[0], 9);
@@ -107,6 +107,8 @@ impl PublicKey {
 #[cfg(test)]
 mod test_x25519 {
     use rand::Rng;
+
+    use crate::field;
     use crate::x25519::{PrivateKey, PublicKey};
 
     fn hex_decode(s: &str) -> Vec<u8> {
@@ -114,7 +116,6 @@ mod test_x25519 {
         assert!(r.is_ok());
         r.unwrap()
     }
-
 
     #[test]
     fn test_failure_01() {
@@ -254,6 +255,87 @@ mod test_x25519 {
             let ss_hex = "4A5D9D5BA4CE2DE1728E3BF480350F25E07E21C947D19E3376F09B3C1E161742";
 
             _test_x25519_success_(pr_key_hex, peer_pub_key_hex, ss_hex);
+        }
+    }
+
+    #[test]
+    fn test_mul_001() {
+        {
+            let five: [u8; 32] = [
+                5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ];
+            let eight: [u8; 32] = [
+                8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ];
+            let fe5 = field::Element::from_le_bytes(five);
+            let fe8 = field::Element::from_le_bytes(eight);
+            let fe40 = field::Element::multiply(&fe5, &fe8);
+            assert_eq!(fe40.0, 40);
+            let mut inv8 = field::Element::invert(&fe8);
+            inv8.reduce();
+            let mut one = field::Element::multiply(&fe8, &inv8);
+            one.reduce();
+            assert_eq!(one, field::Element::ONE.clone());
+        }
+
+        {
+            // 2^255 - 19
+            let _bytes_25519_: [u8; 32] = [
+                0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xed,
+            ];
+
+            {
+                // 2^255 - 24
+                let bytes_25224: [u8; 32] = [
+                    0xe8, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f,
+                ];
+                let pow_2_252: [u8; 32] = [
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10,
+                ];
+                let twenty_four: [u8; 32] = [
+                    24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ];
+                let fe_2_252 = field::Element::from_le_bytes(pow_2_252);
+                let fe_24 = field::Element::from_bytes(twenty_four);
+                let mut fe_252_24 = field::Element::subtract(&fe_2_252, &fe_24);
+                fe_252_24.reduce();
+                assert_eq!(fe_252_24, field::Element::from_le_bytes(bytes_25224))
+            }
+
+            {
+                // 2^255 - 24
+                let bytes_25524: [u8; 32] = [
+                    0xe8, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
+                ];
+                let fe_25524 = field::Element::from_le_bytes(bytes_25524);
+
+                let bytes_25203: [u8; 32] = [
+                    0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f,
+                ];
+                let fe_25203 = field::Element::from_le_bytes(bytes_25203);
+
+                let eight: [u8; 32] = [
+                    8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ];
+                let fe_8 = field::Element::from_le_bytes(eight);
+                let mut inv_8 = field::Element::invert(&fe_8);
+                inv_8.reduce();
+
+                let mut r = field::Element::multiply(&fe_25524, &inv_8);
+                r.reduce();
+                assert_eq!(r, fe_25203);
+            }
         }
     }
 }
