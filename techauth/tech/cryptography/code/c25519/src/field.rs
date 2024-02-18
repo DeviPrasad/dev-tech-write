@@ -532,7 +532,6 @@ impl Element {
 
 #[cfg(test)]
 mod field_test {
-    use crate::field;
     use crate::field::Element;
 
     #[test]
@@ -644,7 +643,7 @@ mod field_test {
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
         ];
-        let fe_25524 = field::Element::from_le_bytes(bytes_25524);
+        let fe_25524 = Element::from_le_bytes(bytes_25524);
         // // (2^255 - 19) - 5 == (2^255 - 24)
         {
             // 2^255 - 19
@@ -653,14 +652,14 @@ mod field_test {
                 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
             ];
-            let fe_25519 = field::Element::from_le_bytes(bytes_25519);
+            let fe_25519 = Element::from_le_bytes(bytes_25519);
             let five: [u8; 32] = [
                 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ];
             assert_eq!(fe_25524,
                        //(2^255 - 19) - 5
-                       field::Element::subtract(&fe_25519,
-                                                &field::Element::from_le_bytes(five)));
+                       Element::subtract(&fe_25519,
+                                         &Element::from_le_bytes(five)));
         }
         // (2^255 - 24)/8 == (2^252 - 3)
         {
@@ -669,17 +668,17 @@ mod field_test {
                 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f,
             ];
-            let fe_25203 = field::Element::from_le_bytes(bytes_25203);
+            let fe_25203 = Element::from_le_bytes(bytes_25203);
 
             let eight: [u8; 32] = [
                 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ];
-            let fe_8 = field::Element::from_le_bytes(eight);
-            let mut inv_8 = field::Element::invert(&fe_8);
+            let fe_8 = Element::from_le_bytes(eight);
+            let mut inv_8 = Element::invert(&fe_8);
             inv_8.reduce();
 
-            let mut r = field::Element::multiply(&fe_25524, &inv_8);
+            let mut r = Element::multiply(&fe_25524, &inv_8);
             r.reduce();
             assert_eq!(r, fe_25203);
         }
@@ -699,17 +698,17 @@ mod field_test {
                 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ];
-            let fe_2_252 = field::Element::from_le_bytes(pow_2_252);
-            let fe_24 = field::Element::from_bytes(twenty_four);
-            let mut fe_252_24 = field::Element::subtract(&fe_2_252, &fe_24);
+            let fe_2_252 = Element::from_le_bytes(pow_2_252);
+            let fe_24 = Element::from_bytes(twenty_four);
+            let mut fe_252_24 = Element::subtract(&fe_2_252, &fe_24);
             fe_252_24.reduce();
-            assert_eq!(fe_252_24, field::Element::from_le_bytes(bytes_25224))
+            assert_eq!(fe_252_24, Element::from_le_bytes(bytes_25224))
         }
     }
 
     #[test]
     fn test_calc_rfc8032_d() {
-        // d of edwards25519 in [RFC7748] = -121665/121666
+        // d of edwards25519 in [RFC7748 & RFC8032] = -121665/121666
         // d = 37095705934669439343138083508754565189542113879843219016388785533085940283555
         //   = 0x52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3
         let bytes_d: [u8; 32] = [
@@ -717,26 +716,90 @@ mod field_test {
             0x41, 0x4d, 0x0a, 0x70, 0x00, 0x98, 0xe8, 0x79, 0x77, 0x79, 0x40,
             0xc7, 0x8c, 0x73, 0xfe, 0x6f, 0x2b, 0xee, 0x6c, 0x03, 0x52,
         ];
-        let fe_rfc7748_d = field::Element::from_le_bytes(bytes_d);
+        let fe_rfc7748_d = Element::from_le_bytes(bytes_d);
 
         let bytes_121665: [u8; 32] = [
             0x41, 0xdb, 0x01,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
-        let fe_121665 = field::Element::from_le_bytes(bytes_121665);
+        let fe_121665 = Element::from_le_bytes(bytes_121665);
 
         let bytes_121666: [u8; 32] = [
             0x42, 0xdb, 0x01,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
-        let fe_121666 = field::Element::from_le_bytes(bytes_121666);
+        let fe_121666 = Element::from_le_bytes(bytes_121666);
 
-        let inv_121666 = field::Element::invert(&fe_121666);
-        let d = field::Element::multiply(&fe_121665, &inv_121666);
-        let neg_d = field::Element::negate(&d);
+        let inv_121666 = Element::invert(&fe_121666);
+        let d = Element::multiply(&fe_121665, &inv_121666);
+        let neg_d = Element::negate(&d);
 
         assert_eq!(neg_d, fe_rfc7748_d);
+    }
+
+    // useful for ed25519
+    // sqrt(-1) == 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0
+    // == sqrt(p-1) where p = (2^255 - 19)
+    // python snippet
+    // hex((0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0 * 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0) % p)
+    //  ==> '0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffec'
+    //  which is the value -1 mod p == (p-1) mod p
+    #[test]
+    fn test_calc_square_of_p_minus_1() {
+        let bytes_25519: [u8; 32] = [
+            0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
+        ];
+        let fe_25519 = Element::from_le_bytes(bytes_25519);
+
+        let bytes_25519_minus_1: [u8; 32] = [
+            0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
+        ];
+        let fe_25519_minus_1 = Element::from_le_bytes(bytes_25519_minus_1);
+
+        // sqrt(-1) in the little-endian encoding.
+        // 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0
+        // ==> 0xb0a00e4a271beec478e42fad0618432fa7d7fb3d99004d2b0bdfc14f8024832b (little-endian)
+        let le_sqrt_bytes: [u8; 32] = [
+            0xb0, 0xa0, 0x0e, 0x4a, 0x27, 0x1b, 0xee, 0xc4, 0x78, 0xe4, 0x2f,
+            0xad, 0x06, 0x18, 0x43, 0x2f, 0xa7, 0xd7, 0xfb, 0x3d, 0x99, 0x00,
+            0x4d, 0x2b, 0x0b, 0xdf, 0xc1, 0x4f, 0x80, 0x24, 0x83, 0x2b
+        ];
+        let fe_sqrt_25519_minus_1 = Element::from_bytes(le_sqrt_bytes);
+        let _25519_minus_1_ = Element::square(&fe_sqrt_25519_minus_1);
+        assert_eq!(fe_25519_minus_1, _25519_minus_1_);
+        assert_eq!(fe_25519_minus_1,
+                   Element::subtract(&fe_25519, &Element::ONE.clone()));
+    }
+
+    // ed25519 base point = (x, 4/5)
+    // = 4 * inv(5) == 0x6666666666666666666666666666666666666666666666666666666666666658
+    #[test]
+    fn test_base_point() {
+        let le_bytes_ed25519_base_point_y = [
+            0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+            0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+            0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+        ];
+        let fe_ed25519_base_y = Element::from_bytes(le_bytes_ed25519_base_point_y);
+
+        let four: [u8; 32] = [
+            4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let fe_4 = Element::from_le_bytes(four);
+
+        let five: [u8; 32] = [
+            5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let fe_inv_5 = Element::invert(&Element::from_le_bytes(five));
+        let res_ed25519_base_y = Element::multiply(&fe_4, &fe_inv_5);
+        assert_eq!(res_ed25519_base_y, fe_ed25519_base_y);
     }
 }
